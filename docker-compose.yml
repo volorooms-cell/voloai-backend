@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  # ==========================================
+  # FastAPI Backend
+  # ==========================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: volo_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount code for hot-reload during development
+      - .:/app
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=volo
+      - POSTGRES_PASSWORD=volo_dev_password
+      - POSTGRES_DB=volo_ai
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DEBUG=true
+      - ENVIRONMENT=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ==========================================
+  # PostgreSQL Database
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: volo_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: volo
+      POSTGRES_PASSWORD: volo_dev_password
+      POSTGRES_DB: volo_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data between container restarts
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volo -d volo_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Redis Cache & Message Broker
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: volo_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      # Persist data between container restarts
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+  redis_data:
