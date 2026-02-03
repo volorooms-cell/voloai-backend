@@ -1,0 +1,23 @@
+services:
+  api:
+    image: voloai-backend:latest
+    env_file:
+      - .env.production
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    restart: always
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: volo_ai
+      POSTGRES_USER: volo
+      POSTGRES_PASSWORD: STRONG_PASSWORD
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  pgdata:
