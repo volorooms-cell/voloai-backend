@@ -23,7 +23,7 @@ from app.core.background_tasks import (
     start_health_check_scheduler,
     stop_health_check_scheduler,
 )
-from app.database import close_db, init_db
+from app.database import init_db, close_db
 
 # Background task handle
 _health_check_task: asyncio.Task | None = None
@@ -34,9 +34,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     global _health_check_task
 
-    # Startup
-    if settings.debug:
-        await init_db()
+    # ---- STARTUP ----
+
+    # Retry DB init (Postgres may not be ready yet)
+    for attempt in range(10):
+        try:
+            await init_db()
+            print("Database initialized successfully")
+            break
+        except Exception as e:
+            print(f"Database not ready (attempt {attempt + 1}/10): {e}")
+            await asyncio.sleep(3)
+    else:
+        raise RuntimeError("Database never became ready")
 
     # Run startup health check (non-blocking)
     asyncio.create_task(run_startup_health_check())
@@ -46,8 +56,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
-    # Shutdown
+    # ---- SHUTDOWN ----
     stop_health_check_scheduler()
+
     if _health_check_task:
         _health_check_task.cancel()
         try:
@@ -72,46 +83,41 @@ def create_application() -> FastAPI:
 
     # Exception handlers
     @app.exception_handler(AppException)
-    async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-        """Handle custom application exceptions."""
+    async def app_exception_handler(
+        request: Request, exc: AppException
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
             headers=exc.headers,
         )
 
-    # Middleware (order matters - first added = last executed)
-    # 1. Security headers (outermost)
+    # Middleware (order matters)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # 2. Rate limiting (production only)
     if settings.environment != "development":
         app.add_middleware(
             RateLimitMiddleware,
             requests_per_minute=settings.rate_limit_per_minute,
         )
 
-    # 3. Request logging
     app.add_middleware(RequestLoggingMiddleware)
 
-    # 4. CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # 5. Gzip compression (innermost)
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-    # Include API routes
+    # Routes
     app.include_router(api_router, prefix=settings.api_prefix)
 
     @app.get("/health")
     async def health_check() -> dict:
-        """Health check endpoint."""
         return {
             "status": "healthy",
             "version": settings.app_version,
@@ -121,7 +127,6 @@ def create_application() -> FastAPI:
 
     @app.get("/")
     async def root() -> dict:
-        """Root endpoint."""
         return {
             "name": settings.app_name,
             "version": settings.app_version,
@@ -133,14 +138,3 @@ def create_application() -> FastAPI:
 
 app = create_application()
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "app.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-        workers=1 if settings.debug else settings.workers,
-    )

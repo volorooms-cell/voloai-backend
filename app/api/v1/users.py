@@ -122,9 +122,9 @@ async def become_host(
     if current_user.role == "admin":
         raise ValidationError("Admin accounts cannot be converted to host")
 
-    # Require identity verification
-    if not current_user.is_verified:
-        raise ValidationError("Identity verification required before becoming a host")
+    # TODO: Re-enable once identity verification flow is built
+    # if not current_user.is_verified:
+    #     raise ValidationError("Identity verification required before becoming a host")
 
     # Update role
     current_user.role = "host"

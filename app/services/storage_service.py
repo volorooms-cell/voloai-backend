@@ -110,7 +110,9 @@ class StorageService:
         self.client.upload_fileobj(file, self._bucket, key, ExtraArgs=extra_args)
 
         # Return public URL
-        if settings.s3_endpoint_url:
+        if settings.s3_public_url:
+            return f"{settings.s3_public_url}/{self._bucket}/{key}"
+        elif settings.s3_endpoint_url:
             # MinIO in development
             return f"{settings.s3_endpoint_url}/{self._bucket}/{key}"
         else:
@@ -178,7 +180,9 @@ class StorageService:
             )
 
             # Generate URL
-            if settings.s3_endpoint_url:
+            if settings.s3_public_url:
+                urls[size_name] = f"{settings.s3_public_url}/{self._bucket}/{key}"
+            elif settings.s3_endpoint_url:
                 urls[size_name] = f"{settings.s3_endpoint_url}/{self._bucket}/{key}"
             else:
                 urls[size_name] = f"https://{self._bucket}.s3.{settings.aws_region}.amazonaws.com/{key}"

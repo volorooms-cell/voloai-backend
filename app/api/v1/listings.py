@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -222,7 +222,14 @@ async def submit_for_approval(
 ) -> Listing:
     """Submit listing for approval."""
     result = await db.execute(
-        select(Listing).where(Listing.id == listing_id).options(selectinload(Listing.photos))
+        select(Listing)
+        .where(Listing.id == listing_id)
+        .options(
+            selectinload(Listing.photos),
+            selectinload(Listing.house_rules),
+            selectinload(Listing.pricing_rules),
+            selectinload(Listing.amenities).selectinload(ListingAmenity.amenity),
+        )
     )
     listing = result.scalar_one_or_none()
     if not listing:
@@ -276,6 +283,71 @@ async def add_photo(
         caption=photo_data.caption,
         sort_order=next_order,
         is_cover=photo_data.is_cover or next_order == 0,
+    )
+    db.add(photo)
+    await db.flush()
+    return photo
+
+
+@router.post("/{listing_id}/photos/upload", response_model=ListingPhotoResponse, status_code=status.HTTP_201_CREATED)
+async def upload_photo(
+    listing_id: UUID,
+    current_user: Annotated[User, Depends(require_listing_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+    is_cover: bool = Form(False),
+    caption: str | None = Form(None),
+) -> ListingPhoto:
+    """Upload a photo file to a listing."""
+    from app.services.storage_service import storage_service
+
+    # Validate listing exists
+    result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    listing = result.scalar_one_or_none()
+    if not listing:
+        raise NotFoundError("Listing", str(listing_id))
+
+    # Validate file type
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed:
+        raise ValidationError(f"File type {file.content_type} not allowed. Use JPEG, PNG, or WebP.")
+
+    # Validate file size (10MB)
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise ValidationError("Image exceeds maximum size of 10MB")
+
+    # Upload to S3/MinIO
+    from io import BytesIO
+    urls = await storage_service.upload_listing_photo(
+        BytesIO(contents), str(listing_id), file.filename or "photo.jpg"
+    )
+    photo_url = urls.get("medium", urls.get("original", list(urls.values())[0]))
+
+    # Get next sort order
+    result = await db.execute(
+        select(ListingPhoto)
+        .where(ListingPhoto.listing_id == listing_id)
+        .order_by(ListingPhoto.sort_order.desc())
+        .limit(1)
+    )
+    last_photo = result.scalar_one_or_none()
+    next_order = (last_photo.sort_order + 1) if last_photo else 0
+
+    # Handle cover photo
+    if is_cover:
+        await db.execute(
+            ListingPhoto.__table__.update()
+            .where(ListingPhoto.listing_id == listing_id)
+            .values(is_cover=False)
+        )
+
+    photo = ListingPhoto(
+        listing_id=listing_id,
+        url=photo_url,
+        caption=caption,
+        sort_order=next_order,
+        is_cover=is_cover or next_order == 0,
     )
     db.add(photo)
     await db.flush()

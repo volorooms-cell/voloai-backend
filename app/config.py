@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     s3_bucket_name: str = "volo-ai-media"
     s3_endpoint_url: Optional[str] = None  # For MinIO in dev
+    s3_public_url: Optional[str] = None  # External URL for MinIO (e.g. http://localhost:9000)
 
     # Elasticsearch
     elasticsearch_url: str = "http://localhost:9200"
@@ -125,7 +126,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 100
 
     # CORS
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    cors_origins: List[str] = ["*"]
 
     # Commission (flat 9% includes all gateway fees)
     marketplace_commission_percent: float = 9.0
