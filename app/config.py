@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import List, Literal, Optional
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,7 +45,18 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def database_url(self) -> str:
-        """Async PostgreSQL connection URL."""
+        """Async PostgreSQL connection URL.
+
+        Prefers DATABASE_URL env var (e.g. Railway) if set,
+        otherwise builds from individual POSTGRES_* fields.
+        """
+        raw = os.environ.get("DATABASE_URL")
+        if raw:
+            parsed = urlparse(raw)
+            # Swap driver to asyncpg
+            scheme = "postgresql+asyncpg"
+            # Strip query params (sslmode etc.) — handled via connect_args
+            return urlunparse((scheme, parsed.netloc, parsed.path, "", "", ""))
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -53,10 +66,22 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         """Sync PostgreSQL connection URL for Alembic."""
+        raw = os.environ.get("DATABASE_URL")
+        if raw:
+            parsed = urlparse(raw)
+            scheme = "postgresql"
+            return urlunparse((scheme, parsed.netloc, parsed.path, parsed.params, parsed.query, ""))
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @computed_field
+    @property
+    def database_requires_ssl(self) -> bool:
+        """Whether the database connection requires SSL (e.g. Railway)."""
+        raw = os.environ.get("DATABASE_URL", "")
+        return "sslmode=" in raw and "sslmode=disable" not in raw
 
     # Redis
     redis_host: str = "localhost"

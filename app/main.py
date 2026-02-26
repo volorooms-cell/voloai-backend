@@ -75,9 +75,9 @@ def create_application() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="VOLO AI - Hospitality Marketplace API",
-        docs_url="/docs" if settings.debug else None,
-        redoc_url="/redoc" if settings.debug else None,
-        openapi_url="/openapi.json" if settings.debug else None,
+        docs_url="/docs" if settings.environment != "production" else None,
+        redoc_url="/redoc" if settings.environment != "production" else None,
+        openapi_url="/openapi.json" if settings.environment != "production" else None,
         lifespan=lifespan,
     )
 
