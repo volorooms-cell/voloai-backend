@@ -35,6 +35,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _health_check_task
 
     # ---- STARTUP ----
+    import os
+    print(f"Environment: {settings.environment}")
+    print(f"PORT: {os.environ.get('PORT', 'not set')}")
+    print(f"DATABASE_URL set: {bool(os.environ.get('DATABASE_URL'))}")
+    print(f"Resolved DB URL: {settings.database_url.split('@')[-1] if '@' in settings.database_url else 'no-auth-found'}")
+    print(f"SSL required: {settings.database_requires_ssl}")
 
     # Retry DB init (Postgres may not be ready yet)
     for attempt in range(10):
