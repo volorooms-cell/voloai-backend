@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir --default-timeout=300 --retries 10 -r requirement
 
 # Copy application code
 COPY . .
+RUN chmod +x start.sh
 
 # Create non-root user
 RUN adduser --disabled-password --gecos '' appuser && \
@@ -33,5 +34,5 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Run the application (Railway sets PORT env var)
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run migrations then start the application
+CMD ["./start.sh"]

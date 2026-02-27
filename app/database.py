@@ -84,6 +84,10 @@ async def init_db() -> None:
     from app.core.immutability import register_immutability_enforcement
     register_immutability_enforcement()
 
+    # In production, schema is managed by Alembic (via start.sh before app starts)
+    if settings.environment == "production":
+        return
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
