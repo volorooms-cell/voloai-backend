@@ -1,7 +1,8 @@
 #!/bin/sh
-set -e
 
 echo "Running database migrations..."
+
+# Capture output and exit code without set -e (we check the exit code ourselves)
 UPGRADE_OUTPUT=$(alembic upgrade head 2>&1)
 UPGRADE_EXIT=$?
 
