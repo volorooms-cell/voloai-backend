@@ -39,7 +39,12 @@ async def search_listings(
     query = (
         select(Listing)
         .where(Listing.status == "approved")
-        .options(selectinload(Listing.photos))
+        .options(
+            selectinload(Listing.photos),
+            selectinload(Listing.house_rules),
+            selectinload(Listing.pricing_rules),
+            selectinload(Listing.amenities).selectinload(ListingAmenity.amenity),
+        )
     )
 
     # Apply filters

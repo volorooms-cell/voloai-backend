@@ -7,12 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_admin, get_db
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.admin import AuditLog, Dispute
 from app.models.booking import Booking
-from app.models.listing import Listing
+from app.models.listing import Listing, ListingAmenity
 from app.models.payment import Refund
 from app.models.review import Review
 from app.models.user import User, UserIdentity
@@ -36,6 +37,12 @@ async def get_pending_listings(
     result = await db.execute(
         select(Listing)
         .where(Listing.status == "pending_approval")
+        .options(
+            selectinload(Listing.photos),
+            selectinload(Listing.house_rules),
+            selectinload(Listing.pricing_rules),
+            selectinload(Listing.amenities).selectinload(ListingAmenity.amenity),
+        )
         .order_by(Listing.created_at.asc())
     )
     return list(result.scalars().all())
@@ -49,7 +56,16 @@ async def approve_listing(
     notes: str | None = None,
 ) -> Listing:
     """Approve a listing."""
-    result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    result = await db.execute(
+        select(Listing)
+        .where(Listing.id == listing_id)
+        .options(
+            selectinload(Listing.photos),
+            selectinload(Listing.house_rules),
+            selectinload(Listing.pricing_rules),
+            selectinload(Listing.amenities).selectinload(ListingAmenity.amenity),
+        )
+    )
     listing = result.scalar_one_or_none()
     if not listing:
         raise NotFoundError("Listing", str(listing_id))
@@ -83,7 +99,16 @@ async def reject_listing(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Listing:
     """Reject a listing."""
-    result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    result = await db.execute(
+        select(Listing)
+        .where(Listing.id == listing_id)
+        .options(
+            selectinload(Listing.photos),
+            selectinload(Listing.house_rules),
+            selectinload(Listing.pricing_rules),
+            selectinload(Listing.amenities).selectinload(ListingAmenity.amenity),
+        )
+    )
     listing = result.scalar_one_or_none()
     if not listing:
         raise NotFoundError("Listing", str(listing_id))
