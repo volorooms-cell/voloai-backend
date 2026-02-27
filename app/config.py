@@ -92,7 +92,10 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def redis_url(self) -> str:
-        """Redis connection URL."""
+        """Redis connection URL. Prefers REDIS_URL env var (e.g. Railway) if set."""
+        raw = os.environ.get("REDIS_URL")
+        if raw:
+            return raw
         auth = f":{self.redis_password}@" if self.redis_password else ""
         return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
